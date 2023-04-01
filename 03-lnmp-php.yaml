@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php
+  namespace: lnmp-one
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: php
+  template:
+    metadata:
+      labels:
+        app: php
+    spec:
+      containers:
+        - name: php
+          image: php:latest
+          volumeMounts:
+            - name: php-src
+              mountPath: /var/www/html
+      volumes:
+        - name: php-src
+          configMap:
+            name: php-src
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: php
+  namespace: lnmp-one
+spec:
+  selector:
+    app: php
+  ports:
+    - name: php-port
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+  type: ClusterIP
