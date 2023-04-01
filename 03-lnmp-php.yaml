@@ -1,8 +1,101 @@
+---
+# 其中，$servername 的值为MySQL服务的名称（这里是mysql-service）。
+# 在同一命名空间内的服务可以直接使用该名称进行访问。
+# 可以在命名空间中使用以下命令查看MySQL的服务名称：kubectl get services -n <your-namespace>
+# 其中，<your-namespace>应替换为您实际使用的命名空间名称。
+# MySQL的服务名称通常以mysql为前缀，例如mysql-service。
+# -*- coding: utf-8 -*-
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: php-config
+data:
+  index.php: |
+    <?php
+      $servername = "mysql-service";
+      $username = "root";
+      $password = "password";
+      $dbname = "testdb";
+
+      // Create connection
+      $conn = new mysqli($servername, $username, $password, $dbname);
+
+      // Check connection
+      if ($conn->connect_error) {
+        die("Connection failed: " . $conn->connect_error);
+      }
+      echo "Connected successfully to MySQL";
+    ?>
+  php.ini: |
+      php.ini: |
+    ; PHP 基础设置
+    [PHP]
+    ; PHP 启动时是否开启错误提示
+    display_errors = On
+
+    ; 是否允许访问 URL 包含文件
+    allow_url_fopen = Off
+
+    ; 允许的最大内存使用量，0 表示不限制
+    memory_limit = 256M
+
+    ; PHP 模块路径，该示例中已经使用 docker-php-ext-install 命令安装了 mysqli 扩展，所以需要指定扩展的路径
+    extension_dir = /usr/local/lib/php/extensions/no-debug-non-zts-20190902
+
+    ; 启用的扩展模块，每个模块使用一个分号分隔，这里启用 mysqli 扩展
+    extension = mysqli.so
+
+    ; PHP 跟踪设置
+    [OPcache]
+    ; 是否启用 OPcache 模块
+    opcache.enable=1
+
+    ; 缓存文件路径
+    opcache.file_cache=/tmp
+
+    ; 缓存内存大小，0 表示不限制
+    opcache.memory_consumption=256
+
+    ; 启用快速 shutdown
+    opcache.fast_shutdown=1
+
+    ; 启用 OPcache 回收机制
+    opcache.enable_file_override=1
+
+    ; 缓存校验机制，是否启用开发模式
+    opcache.validate_timestamps=1
+
+    ; PHP 错误日志
+    [Log]
+    ; 错误日志文件路径
+    error_log = /var/log/php_error.log
+
+    ; 错误日志记录级别，这里设置为最高级别
+    log_errors_max_len = 0
+    log_errors = On
+
+    ; PHP 会话设置
+    [Session]
+    ; 会话储存方式
+    session.save_handler = redis
+
+    ; 会话储存键名前缀
+    session.save_path = "tcp://redis.default.svc.cluster.local:6379?prefix=phpsess_"
+
+    ; 会话储存时长，单位为秒
+    session.gc_maxlifetime = 7200
+
+    ; 会话 cookie 设置
+    session.cookie_lifetime = 0
+    session.cookie_secure = 1
+    session.cookie_httponly = 1
+    session.use_only_cookies = 1
+    session.name = PHPSESSID
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: php
-  namespace: lnmp-one
+  name: php-deployment
 spec:
   replicas: 1
   selector:
@@ -14,27 +107,19 @@ spec:
         app: php
     spec:
       containers:
-        - name: php
-          image: php:latest
-          volumeMounts:
-            - name: php-src
-              mountPath: /var/www/html
+      - name: php
+        image: PHP-MySQL-WW:latest
+        volumeMounts:
+        - name: php-config-volume
+          mountPath: /var/www/html
+        ports:
+        - containerPort: 9000
       volumes:
-        - name: php-src
-          configMap:
-            name: php-src
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: php
-  namespace: lnmp-one
-spec:
-  selector:
-    app: php
-  ports:
-    - name: php-port
-      protocol: TCP
-      port: 9000
-      targetPort: 9000
-  type: ClusterIP
+      - name: php-config-volume
+        configMap:
+          name: php-config
+          item:
+          - key: index.php
+            path: index.php
+          - key: php.ini
+            path: php.ini

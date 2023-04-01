@@ -1,7 +1,49 @@
+---
+# 注意：这个yaml文件需要先部署MySQL、PHP和Redis等服务才能成功部署。
+# 添加了一个ConfigMap资源，并将nginx.conf的配置文件内容作为ConfigMap的data。
+# 然后在Nginx的Deployment中，将这个ConfigMap挂载到了Nginx容器的/etc/nginx/nginx.conf路径下。
+# 这样Nginx启动时就会加载这个ConfigMap中的配置文件作为Nginx的配置。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-conf
+  namespace: lnmp-one
+data:
+  nginx.conf: |
+    worker_processes  1;
+    events {
+      worker_connections  1024;
+    }
+    http {
+      include       /etc/nginx/mime.types;
+      default_type  application/octet-stream;
+
+      sendfile        on;
+      keepalive_timeout  65;
+
+      server {
+        listen 80;
+        server_name localhost;
+
+        location / {
+          root /usr/share/nginx/html;
+          index index.php;
+        }
+
+        location ~ \.php$ {
+          root /usr/share/nginx/html;
+          fastcgi_pass php-service:9000;
+          fastcgi_index index.php;
+          fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+          include fastcgi_params;
+        }
+      }
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx
+  name: nginx-deployment
   namespace: lnmp-one
 spec:
   replicas: 1
@@ -19,18 +61,13 @@ spec:
           ports:
             - containerPort: 80
           volumeMounts:
-            - name: nginx-conf
+            - name: nginx-conf-volume
               mountPath: /etc/nginx/nginx.conf
               subPath: nginx.conf
-            - name: nginx-src
-              mountPath: /usr/share/nginx/html
       volumes:
-        - name: nginx-conf
+        - name: nginx-conf-volume
           configMap:
             name: nginx-conf
-        - name: nginx-src
-          configMap:
-            name: nginx-src
 ---
 apiVersion: v1
 kind: Service
